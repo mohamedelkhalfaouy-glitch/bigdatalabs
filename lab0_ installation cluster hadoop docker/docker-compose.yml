@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  hadoop-master:
+    image: yassern1/hadoop-spark-jupyter:1.0.3
+    container_name: hadoop-master
+    hostname: hadoop-master
+    ports:
+      - "9870:9870"    # NameNode UI
+      - "8088:8088"    # YARN ResourceManager
+      - "7077:7077"    # Spark Master
+      - "19888:19888"  # JobHistory
+      - "8080:8080"    # Spark UI + Jupyter
+      - "9000:9000"    # HDFS port
+    volumes:
+      - D:/BigData2025/lab0_ installation cluster hadoop docker/hadoop_project:/shared_volume
+      - hadoop-master-data:/var/lib/hadoop
+    networks:
+      - hadoop
+    environment:
+      - CLUSTER_NAME=hadoop_cluster
+      - CORE_CONF_fs_defaultFS=hdfs://hadoop-master:9000
+    command: >
+      bash -c "service ssh start &&
+               sleep 5 &&
+               /root/start-hadoop.sh &&
+               /root/start-spark.sh &&
+               /root/start-jupyter.sh &&
+               tail -f /dev/null"
+    stdin_open: true
+    tty: true
+
+  hadoop-slave1:
+    image: yassern1/hadoop-spark-jupyter:1.0.3
+    container_name: hadoop-slave1
+    hostname: hadoop-slave1
+    ports:
+      - "8040:8042"
+    volumes:
+      - D:/BigData2025/lab0_ installation cluster hadoop docker/hadoop_project:/shared_volume
+      - hadoop-slave1-data:/var/lib/hadoop
+    networks:
+      - hadoop
+    environment:
+      - CLUSTER_NAME=hadoop_cluster
+      - CORE_CONF_fs_defaultFS=hdfs://hadoop-master:9000
+    depends_on:
+      - hadoop-master
+    command: >
+      bash -c "service ssh start &&
+               sleep 10 &&
+               /root/start-hadoop.sh &&
+               /root/start-spark.sh &&
+               tail -f /dev/null"
+    stdin_open: true
+    tty: true
+
+  hadoop-slave2:
+    image: yassern1/hadoop-spark-jupyter:1.0.3
+    container_name: hadoop-slave2
+    hostname: hadoop-slave2
+    ports:
+      - "8041:8042"
+    volumes:
+      - D:/BigData2025/lab0_ installation cluster hadoop docker/hadoop_project:/shared_volume
+      - hadoop-slave2-data:/var/lib/hadoop
+    networks:
+      - hadoop
+    environment:
+      - CLUSTER_NAME=hadoop_cluster
+      - CORE_CONF_fs_defaultFS=hdfs://hadoop-master:9000
+    depends_on:
+      - hadoop-master
+    command: >
+      bash -c "service ssh start &&
+               sleep 10 &&
+               /root/start-hadoop.sh &&
+               /root/start-spark.sh &&
+               tail -f /dev/null"
+    stdin_open: true
+    tty: true
+
+volumes:
+  hadoop-master-data:
+  hadoop-slave1-data:
+  hadoop-slave2-data:
+
+networks:
+  hadoop:
+    driver: bridge
