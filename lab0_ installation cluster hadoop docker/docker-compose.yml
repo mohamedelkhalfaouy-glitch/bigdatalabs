@@ -13,7 +13,7 @@ services:
       - "8080:8080"    # Spark UI + Jupyter
       - "9000:9000"    # HDFS port
     volumes:
-      - D:/BigData2025/lab0_ installation cluster hadoop docker/hadoop_project:/shared_volume
+      - ./hadoop_project:/shared_volume
       - hadoop-master-data:/var/lib/hadoop
     networks:
       - hadoop
@@ -37,7 +37,7 @@ services:
     ports:
       - "8040:8042"
     volumes:
-      - D:/BigData2025/lab0_ installation cluster hadoop docker/hadoop_project:/shared_volume
+      - ./hadoop_project:/shared_volume
       - hadoop-slave1-data:/var/lib/hadoop
     networks:
       - hadoop
@@ -62,7 +62,7 @@ services:
     ports:
       - "8041:8042"
     volumes:
-      - D:/BigData2025/lab0_ installation cluster hadoop docker/hadoop_project:/shared_volume
+      - ./hadoop_project:/shared_volume
       - hadoop-slave2-data:/var/lib/hadoop
     networks:
       - hadoop

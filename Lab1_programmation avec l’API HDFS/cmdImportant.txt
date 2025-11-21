@@ -1,0 +1,153 @@
+# ============================================================
+# TOUTES LES COMMANDES BIG DATA 2025-2026
+# Lab0 : Installation Cluster Hadoop avec Docker
+# Lab1 : Programmation avec l'API HDFS + Git/GitHub
+# ============================================================
+
+# ------------------------------------------------------------
+# LAB 0 - Installation du Cluster Hadoop avec Docker
+# ------------------------------------------------------------
+
+# 1. Installation de Docker (Ubuntu/Debian)
+sudo apt-get update
+sudo apt-get install docker.io
+docker version
+
+# 2. Téléchargement de l'image Hadoop + Spark + Jupyter
+docker pull yassern1/hadoop-spark-jupyter:1.0.3
+docker images
+
+# 3. Création du réseau Docker
+docker network create --driver=bridge hadoop
+
+# 4. Création des 3 conteneurs
+# Master
+docker run -itd -v ~/Documents/hadoop_project/:/shared_volume \
+  --net=hadoop -p 9870:9870 -p 8088:8088 -p 7077:7077 -p 19888:19888 -p 8080:8080 -p 9000:9000 \
+  --name hadoop-master --hostname hadoop-master yassern1/hadoop-spark-jupyter:1.0.3
+
+# Slave 1
+docker run -itd -p 8040:8042 --net=hadoop --name hadoop-slave1 --hostname hadoop-slave1 yassern1/hadoop-spark-jupyter:1.0.3
+
+# Slave 2
+docker run -itd -p 8041:8042 --net=hadoop --name hadoop-slave2 --hostname hadoop-slave2 yassern1/hadoop-spark-jupyter:1.0.3
+
+# 5. Démarrage du cluster (après redémarrage machine)
+docker start hadoop-master hadoop-slave1 hadoop-slave2
+docker exec -it hadoop-master bash
+./start-hadoop.sh
+
+# Vérification des services
+jps
+# Web UIs :
+# http://localhost:9870   → NameNode
+# http://localhost:8088   → ResourceManager
+# http://localhost:19888  → JobHistory Server
+
+# ------------------------------------------------------------
+# Commandes HDFS de base (dans le conteneur hadoop-master)
+# ------------------------------------------------------------
+hdfs dfs -mkdir -p /user/root
+hdfs dfs -mkdir input
+hdfs dfs -mkdir web_input
+
+hdfs dfs -ls
+hdfs dfs -ls -R
+hdfs dfs -ls -R -h ./
+
+# Copier un fichier local → HDFS
+hdfs dfs -put /shared_volume/purchases.txt .
+hdfs dfs -put /shared_volume/alice.txt web_input
+
+# Autres façons de copier
+hdfs dfs -copyFromLocal /shared_volume/purchases.txt ./input
+
+# Afficher contenu
+hdfs dfs -cat purchases.txt
+hdfs dfs -cat input/purchases.txt
+hdfs dfs -tail purchases.txt
+
+# Permissions
+hdfs dfs -chmod 777 ./input/purchases.txt
+hdfs dfs -chmod ugo-x ./input/purchases.txt
+
+# Déplacer / Renommer
+hdfs dfs -mv ./input/purchases.txt /purchases_renomme.txt
+
+# Copier dans HDFS
+hdfs dfs -cp ./input/purchases.txt ./purchases_copie.txt
+
+# Récupérer sur machine locale
+hdfs dfs -get ./input/purchases.txt /shared_volume/achat.txt
+
+# Supprimer
+hdfs dfs -rm purchases.txt
+hdfs dfs -rm -r input
+
+# Téléchargement direct d'un fichier
+wget http://www.textfiles.com/etext/FICTION/alice.txt
+
+# ------------------------------------------------------------
+# LAB 1 - Programmation API HDFS + Git
+# ------------------------------------------------------------
+
+# Compilation Maven (dans votre projet local)
+mvn clean package
+
+# Exécution des JARs (dans le conteneur hadoop-master)
+hadoop jar /shared_volume/HadoopFileStatus.jar /user/root/input purchases.txt achats.txt
+hadoop jar /shared_volume/ReadHDFS.jar /user/root/input/achats.txt
+hadoop jar /shared_volume/WriteHDFS.jar /user/root/input/bonjour.txt "Bonjour HDFS depuis Java !"
+
+# ------------------------------------------------------------
+# Git & GitHub - Initialisation (une seule fois)
+# ------------------------------------------------------------
+cd ~/BigdataLabs  # ou votre dossier principal
+
+git --version
+git config --global user.name "Votre Nom"
+git config --global user.email "votre.email@exemple.com"
+git config --list
+
+git init
+git remote add origin https://github.com/votreusername/BIGDATALABS.git
+
+git add .
+git commit -m "Initialisation du dépôt Big Data Labs"
+git branch -M main
+git push -u origin main
+
+# Pour chaque nouveau lab
+git add lab2
+git commit -m "Ajout du lab2 : description"
+git push
+
+# ------------------------------------------------------------
+# Arrêt propre du cluster
+# ------------------------------------------------------------
+exit   # sortir du conteneur
+docker stop hadoop-master hadoop-slave1 hadoop-slave2
+
+# (Optionnel) Suppression complète
+# docker compose down -v
+# docker network rm hadoop
+
+# ------------------------------------------------------------
+# Commandes utiles supplémentaires (bonus)
+# ------------------------------------------------------------
+# Voir tous les conteneurs
+docker ps -a
+
+# Logs d’un conteneur
+docker logs hadoop-master
+
+# Entrer dans un slave
+docker exec -it hadoop-slave1 bash
+
+# Taille d’un fichier sur HDFS
+hdfs dfs -du -h /user/root/input/purchases.txt
+
+# Créer un répertoire avec parents
+hdfs dfs -mkdir -p /user/root/output/resultats
+
+echo "Fin du fichier - Toutes les commandes Lab0 + Lab1 sont ici !"
