@@ -1,0 +1,3 @@
+edu\ismagi\hadoop\mapreduce\WordCount.class
+edu\ismagi\hadoop\mapreduce\IntSumReducer.class
+edu\ismagi\hadoop\mapreduce\TokenizerMapper.class
