@@ -1,32 +1,36 @@
 version: '3.8'
 
 services:
+  # ====================== HADOOP + SPARK + JUPYTER ======================
   hadoop-master:
     image: yassern1/hadoop-spark-jupyter:1.0.3
     container_name: hadoop-master
     hostname: hadoop-master
     ports:
-      - "9870:9870"    # NameNode UI
+      - "9870:9870"    # HDFS NameNode UI
       - "8088:8088"    # YARN ResourceManager
+      - "19888:19888"  # MapReduce JobHistory
       - "7077:7077"    # Spark Master
-      - "19888:19888"  # JobHistory
-      - "8080:8080"    # Spark UI + Jupyter
+      - "4040:4040"    # Spark UI (changed from 8080 → avoid conflict)
+      - "8888:8888"    # Jupyter Lab (changed from 8080)
       - "9000:9000"    # HDFS port
     volumes:
       - ./hadoop_project:/shared_volume
       - hadoop-master-data:/var/lib/hadoop
     networks:
-      - hadoop
+      - hadoop-network
     environment:
       - CLUSTER_NAME=hadoop_cluster
       - CORE_CONF_fs_defaultFS=hdfs://hadoop-master:9000
     command: >
-      bash -c "service ssh start &&
-               sleep 5 &&
-               /root/start-hadoop.sh &&
-               /root/start-spark.sh &&
-               /root/start-jupyter.sh &&
-               tail -f /dev/null"
+      bash -c "
+        service ssh start &&
+        sleep 5 &&
+        /root/start-hadoop.sh &&
+        /root/start-spark.sh &&
+        /root/start-jupyter.sh &&
+        tail -f /dev/null
+      "
     stdin_open: true
     tty: true
 
@@ -35,56 +39,187 @@ services:
     container_name: hadoop-slave1
     hostname: hadoop-slave1
     ports:
-      - "8040:8042"
+      - "8042:8042"    # NodeManager UI slave1
     volumes:
       - ./hadoop_project:/shared_volume
       - hadoop-slave1-data:/var/lib/hadoop
     networks:
-      - hadoop
+      - hadoop-network
     environment:
       - CLUSTER_NAME=hadoop_cluster
       - CORE_CONF_fs_defaultFS=hdfs://hadoop-master:9000
     depends_on:
       - hadoop-master
     command: >
-      bash -c "service ssh start &&
-               sleep 10 &&
-               /root/start-hadoop.sh &&
-               /root/start-spark.sh &&
-               tail -f /dev/null"
-    stdin_open: true
-    tty: true
+      bash -c "
+        service ssh start &&
+        sleep 10 &&
+        /root/start-hadoop.sh &&
+        /root/start-spark.sh &&
+        tail -f /dev/null
+      "
 
   hadoop-slave2:
     image: yassern1/hadoop-spark-jupyter:1.0.3
     container_name: hadoop-slave2
     hostname: hadoop-slave2
     ports:
-      - "8041:8042"
+      - "8043:8042"    # NodeManager UI slave2 (different host port)
     volumes:
       - ./hadoop_project:/shared_volume
       - hadoop-slave2-data:/var/lib/hadoop
     networks:
-      - hadoop
+      - hadoop-network
     environment:
       - CLUSTER_NAME=hadoop_cluster
       - CORE_CONF_fs_defaultFS=hdfs://hadoop-master:9000
     depends_on:
       - hadoop-master
     command: >
-      bash -c "service ssh start &&
-               sleep 10 &&
-               /root/start-hadoop.sh &&
-               /root/start-spark.sh &&
-               tail -f /dev/null"
-    stdin_open: true
-    tty: true
+      bash -c "
+        service ssh start &&
+        sleep 10 &&
+        /root/start-hadoop.sh &&
+        /root/start-spark.sh &&
+        tail -f /dev/null
+      "
+
+    # =========================== KAFKA STACK ===========================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.4
+    container_name: zookeeper
+    hostname: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - hadoop-network
+
+  kafka1:
+    image: confluentinc/cp-kafka:7.4.4
+    container_name: kafka1
+    hostname: kafka1
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      # Critical fixes below:
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Replication settings (safe with 3 brokers)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+    networks:
+      - hadoop-network
+
+  kafka2:
+    image: confluentinc/cp-kafka:7.4.4
+    container_name: kafka2
+    hostname: kafka2
+    ports:
+      - "9093:9092"   # map host:9093 → container:9092
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+    networks:
+      - hadoop-network
+
+  kafka3:
+    image: confluentinc/cp-kafka:7.4.4
+    container_name: kafka3
+    hostname: kafka3
+    ports:
+      - "9094:9092"   # map host:9094 → container:9092
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+    networks:
+      - hadoop-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:9092,kafka2:9092,kafka3:9092
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    networks:
+      - hadoop-network
+
+  kafka-connect:
+    image: confluentinc/cp-kafka-connect:7.4.4
+    container_name: kafka-connect
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./hadoop_project/connectors:/etc/kafka-connect/jars
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka1:9092,kafka2:9092,kafka3:9092
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+      CONNECT_GROUP_ID: connect-cluster
+      CONNECT_CONFIG_STORAGE_TOPIC: connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 3
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_INTERNAL_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components,/etc/kafka-connect/jars
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    networks:
+      - hadoop-network
+
+networks:
+  hadoop-network:
+    driver: bridge
 
 volumes:
   hadoop-master-data:
   hadoop-slave1-data:
   hadoop-slave2-data:
-
-networks:
-  hadoop:
-    driver: bridge
